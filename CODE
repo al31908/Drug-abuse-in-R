@@ -1,0 +1,529 @@
+library(ggplot2)
+library(dplyr)
+library(magrittr)
+library(plotly)
+library(tidyr)
+library(lme4)
+library(haven) 
+library(tidyverse) 
+library(lmerTest)
+require(sjPlot)
+library(glmmTMB)
+library(FactoMineR)
+library(factoextra)
+
+
+df <- nsduh_2019
+remove(nsduh_2019)
+missing_counts <- colSums(is.na(df))
+print(missing_counts)
+total_na <- sum(is.na(df))
+print(total_na)
+
+
+
+# DISTRIBUZIONE SEX -------------------------------------------------------
+
+
+barplot(table(df$sex), col = c("skyblue", "pink"), main = "Distribuzione del Sesso nel Dataset",
+        xlab = "Sesso", ylab = "Conteggio", legend.text = FALSE, cex.names = 0.8, names.arg = c("Uomo", "Donna"),
+        ylim = c(0, max(table(df$sex)) + 1700))  # Aumenta la scala dell'asse Y
+
+
+counts <- table(df$sex)
+text(x = barplot(counts, col = c("skyblue", "pink"), plot = FALSE), y = counts + 50, label = counts, pos = 3, cex = 0.8, col = "black")
+
+
+
+
+# DISTRIBUZIONE RACE ------------------------------------------------------
+
+
+etnie <- table(df$race)
+etichette_race <- c("White", "Black", "Native American", "Native Hawaiian/Pacific Islander", "Asian", "Multi-Racial", "Hispanic")
+
+ggplot(df, aes(x = factor(race), fill = factor(race))) +
+  geom_bar(color = "black", alpha = 0.7, position = "dodge") +
+  geom_text(stat = "count", aes(label = ..count..),
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3, color = "red") +
+  labs(title = "Distribuzione della variabile Race",
+       x = "Race",
+       y = "Frequenza") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f", "#f5595f"),
+                    labels = etichette_race) +
+  guides(fill = guide_legend(title = "Race"))
+
+
+
+
+# DISTRIBUZIONE AGE -------------------------------------------------------
+ggplot(df, aes(x = factor(age), fill = factor(age))) +
+  geom_bar(color = "black", alpha = 0.7, stat = "count") +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +
+  labs(title = "Distribuzione della variabile Age", x = "Age", y = "Frequenza") +
+  theme_minimal() +
+  scale_x_discrete(labels = c("1" = "12-17 ",
+                              "2" = "18-25 ",
+                              "3" = "26-34 ",
+                              "4" = "35-49 ",
+                              "5" = "50-64 ",
+                              "6" = "65 years or older")) +
+  scale_fill_manual(values = c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f")) +
+  theme(legend.position="none")  
+
+
+
+# CREAZIONE VARIABILE CONTEGGIO_DROGA -------------------------------------
+
+df[, 1:8] <- apply(df[, 1:8], 2, as.numeric)
+df$conteggio_droghe <- rowSums(df[, 1:8])
+
+
+
+
+# ANALISI NON CONSUMATORI -------------------------------------------------
+
+df_nessuna_droga <- df[df$conteggio_droghe == 0, ]
+total_occurrences <- nrow(df_nessuna_droga)
+
+
+# DIFFERENZA PER AGE TRA CONSUMATORI E NON CONSUMATORI --------------------
+ggplot(df, aes(x = factor(age))) +
+  geom_bar(aes(fill = "Tutte le occorrenze"), position = "dodge", color = "black", alpha = 0.7, stat = "count") +
+  geom_bar(data = df[df$conteggio_droghe == 0,], aes(fill = "Conteggio_droghe = 0"), position = "dodge", color = "black", alpha = 0.7, stat = "count") +
+  geom_text(stat = "count", aes(label = ..count..), position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Distribuzione della variabile Age",
+       x = "Età",
+       y = "Conteggio") +
+  scale_fill_manual(values = c("Tutte le occorrenze" = "#66c2a5", "Conteggio_droghe = 0" = "orange")) +
+  scale_x_discrete(labels = c("1" = "12-17 ",
+                              "2" = "18-25 ",
+                              "3" = "26-34 ",
+                              "4" = "35-49 ",
+                              "5" = "50-64 ",
+                              "6" = "65 years or older")) +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.position = "top",
+        legend.key.size = unit(0.5, "cm"))
+
+
+
+
+# DISTRIBUZIONE CONTEGGIO DROGHE PER AGE=1 --------------------------------
+
+df_age_1 <- df %>% filter(age == 1)
+
+
+ggplot(df_age_1, aes(x = factor(conteggio_droghe))) +
+  geom_bar(stat = "count", position = "dodge", color = "black", fill = "#66c2a5", alpha = 0.7) +
+  geom_text(stat = "count", aes(label = ..count..), 
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+  labs(title = "Distribuzione del conteggio delle droghe quando age=1",
+       x = "Conteggio droghe",
+       y = "") +
+  scale_fill_manual(values = c("#66c2a5")) +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+ris7_filtered <- df %>%
+  filter(age == 1, conteggio_droghe == 1) %>%
+  count(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  arrange(desc(n))
+
+ris7_filtered <- df %>%
+  filter(age == 1, conteggio_droghe == 2) %>%
+  count(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  arrange(desc(n))
+
+ris7_filtered <- df %>%
+  filter(age == 1, conteggio_droghe == 3) %>%
+  count(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  arrange(desc(n))
+
+ris7_filtered <- df %>%
+  filter(age == 1, conteggio_droghe == 4) %>%
+  count(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  arrange(desc(n))
+
+ris7_filtered <- df %>%
+  filter(age == 1, conteggio_droghe == 5) %>%
+  count(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  arrange(desc(n))
+
+
+
+# CONFRONTO SITUAZIONE FAMILIARE QUANDO AGE = 1 ---------------------------
+df_age_1_droghe_0_combinazioni <- df %>%
+  filter(age == 1, conteggio_droghe == 0) %>%
+  mutate(combined_parent = paste0(father, "-", mother),
+         combined_parent_label = case_when(
+           father == 1 & mother == 1 ~ "1-1",
+           father == 1 & mother == 2 ~ "1-2",
+           father == 2 & mother == 1 ~ "2-1",
+           father == 2 & mother == 2 ~ "2-2",
+           father == 3 & mother == 3 ~ "3-3"
+         ))
+
+
+
+df_age_1_droghe_ge_1_combinazioni <- df %>%
+  filter(age == 1, conteggio_droghe >=1) %>%
+  mutate(combined_parent = paste0(father, "-", mother),
+         combined_parent_label = case_when(
+           father == 1 & mother == 1 ~ "1-1",
+           father == 1 & mother == 2 ~ "1-2",
+           father == 2 & mother == 1 ~ "2-1",
+           father == 2 & mother == 2 ~ "2-2",
+           father == 3 & mother == 3 ~ "3-3"
+         ))
+
+
+df_combined <- bind_rows(
+  mutate(df_age_1_droghe_0_combinazioni, conteggio_droghe_label = "Conteggio = 0"),
+  mutate(df_age_1_droghe_ge_1_combinazioni, conteggio_droghe_label = "Conteggio >= 1")
+)
+
+ggplot(df_combined, aes(x = combined_parent, fill = combined_parent_label)) +
+  geom_bar(position = "dodge", color = "black", alpha = 0.7) +
+  geom_text(stat = "count", aes(label = ..count..),
+            position = position_dodge(width = 0.9), vjust = -0.5) + 
+  labs(title = "Distribuzione di father e mother quando age=1",
+       x = "Father - Mother",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3","#57ffc3"),
+                    labels = c("1 = Presente", "2 = Assente", "3 = Non si sa", "4 = Maggiorenne"),
+                    name = "Situazione genitori") +
+  facet_wrap(~ conteggio_droghe_label, scales = "free_x", ncol = 2)
+
+
+# CONFRONTO COMBINAZIONI GENITORI IN TERMINI PERCENTUALE  -----------------
+
+# percentuali per ogni combinazione di combined_parent rispetto al totale del proprio sottoinsieme
+df_percentuali <- df %>%
+  filter(age == 1, conteggio_droghe %in% 1:4, !(father == 3 & mother == 3)) %>%
+  mutate(combined_parent = paste0(father, "-", mother),
+         combined_parent_label = case_when(
+           father == 1 & mother == 1 ~ "1-1 (Presente-Presente)",
+           father == 1 & mother == 2 ~ "1-2 (Presente-Assente)",
+           father == 2 & mother == 1 ~ "2-1 (Assente-Presente)",
+           father == 2 & mother == 2 ~ "2-2 (Assente-Assente)",
+           father == 3 & mother == 3 ~ "3-3 (Non si sa-Non si sa)"
+         )) %>%
+  group_by(conteggio_droghe, combined_parent, combined_parent_label) %>%
+  tally() %>%
+  group_by(conteggio_droghe) %>%
+  mutate(percentuale_assoluta = n / sum(n) * 100)
+
+
+ggplot(df_percentuali, aes(x = factor(conteggio_droghe), y = percentuale_assoluta, fill = combined_parent)) +
+  geom_bar(stat = "identity", position = "stack", color = "black", alpha = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", percentuale_assoluta)),
+            position = position_stack(vjust = 0.5), size = 3, color = "white") +  
+  labs(title = "Percentuali di combinazioni Padre-Madre rispetto a conteggio droghe",
+       x = "Conteggio droghe",
+       y = "Percentuale Assoluta",
+       fill = "Combined Parent") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#57ffc3"),
+                    labels = c("1-1 (Presente-Presente)", "1-2 (Presente-Assente)",
+                               "2-1 (Assente-Presente)", "2-2 (Assente-Assente)", "3-3 (Non si sa-Non si sa)")) + 
+  facet_wrap(~combined_parent_label, scales = "free_y", ncol = 1)  
+
+
+
+# DISTRIBUZIONE EMPLOYMENT ------------------------------------------------
+
+ggplot(df, aes(x = factor(employment), fill = factor(employment))) +
+  geom_bar(color = "black", alpha = 0.7, position = "dodge") +
+  geom_text(stat = "count", aes(label = ..count..),
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3, color = "red") +
+  labs(title = "Distribuzione della variabile employment",
+       x = "Employment",
+       y = "Frequenza") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#ffd92f"),
+                    labels = c("Employed Full-time", "Employed Part-time", "Unemployed", "Other/Not in Labor Force", "99: Participant is underage; 12-14 years old")) +
+  guides(fill = guide_legend(title = ""))
+
+
+
+
+# CONTEGGIO DROGHE CON EMPLOYMENT = 99 ------------------------------------
+
+dffff <- df[,1:17]
+df_age99 <- dffff %>%
+  filter(employment== 99, conteggio_droghe >= 0)
+
+ggplot(df_age99, aes(x = factor(conteggio_droghe))) +
+  geom_bar(color = "black", fill = "skyblue", alpha = 0.7) +
+  geom_text(stat = "count", aes(label = ..count..),
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3, color = "black") +
+  labs(title = "Distribuzione dei Conteggi di Droghe per Employment = 99",
+       x = "Conteggio di Droghe",
+       y = "Frequenza") +
+  theme_minimal()
+
+
+#COMBINAZIONI PER VALORI DI CONTEGGIO DROGHE
+
+ris5555 <- dffff %>%
+  filter(conteggio_droghe == 5, employment == 99) %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris4444 <- dffff %>%
+  filter(conteggio_droghe == 4, employment == 99)%>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>%  arrange(desc(Conteggio))
+
+ris3333 <- df %>%
+  filter(conteggio_droghe ==3, employment == 99) %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+print(ris3333, n = Inf)
+
+ris2222 <- dffff %>%
+  filter(conteggio_droghe == 2, employment == 99)%>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris1111 <- dffff %>%
+  filter(conteggio_droghe == 1, employment == 99) %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>%
+  arrange(desc(Conteggio))
+
+
+
+
+# ANALISI GENERALE --------------------------------------------------------
+
+
+# CONTEGGIO DELLE SINGOLE DROGHE SU TUTTO IL DATASET ----------------------
+droghe <- c("cigarettes", "cocaine", "meth", "crack", "heroin", "marijuana", "pain_relievers", "alcohol")
+
+somme_droghe <- colSums(df[droghe])
+
+sum_df <- data.frame(Droga = droghe, Somma = somme_droghe)
+
+sum_df <- sum_df[order(sum_df$Somma, decreasing = TRUE), ]
+
+ggplot(sum_df, aes(x = Droga, y = Somma, fill = Droga)) +
+  geom_bar(stat = "identity", color = "black", alpha = 0.7) +
+  geom_text(aes(label = Somma), vjust = -0.5, color = "black") +
+  labs(title = "Frequenza di consumo delle droghe nel dataset",
+       x = "Droga",
+       y = "Somma") +
+  theme_minimal() +
+  scale_fill_manual(values = c("#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f", "#e41a1c", "#377eb8")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# CONTEGGIO COMBINAZIONE DROGHE -------------------------------------------
+palette_colori <- colorRampPalette(c("skyblue", "red"))(8)
+ggplot(df, aes(x = conteggio_droghe)) +
+  geom_bar(fill = palette_colori, color = "black") +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +
+  scale_fill_identity() +
+  labs(title = "Conteggio di occorrenze per numero di droghe contemporaneamente",
+       x = "Numero di droghe",
+       y = "Conteggio",
+       fill = "Gradazione di Colori") +
+  theme_minimal()
+
+
+
+# CONTEGGIO DROGHE DIVISO PER AGE  ----------------------------------------
+
+
+ggplot(df, aes(x = factor(conteggio_droghe), fill = factor(age))) +
+  geom_bar(stat = "count", position = "dodge", color = "black", alpha = 0.7) +
+  geom_text(stat = "count", aes(label = ..count..), 
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+  labs(title = "Conteggio di occorrenze per numero di droghe contemporaneamente diviso per età",
+       x = "Conteggio droghe",
+       y = "Conteggio") +
+  scale_fill_manual(values = palette_colori, 
+                    breaks = c("1", "2", "3", "4", "5", "6"),
+                    labels = c("12-17", "18-25", "26-34", "35-49", "50-64", "65+")) +
+  scale_y_continuous(expand = expansion(mult = c(0.2, 0.4)),
+                     limits = c(0, NA)) +  
+  theme_minimal() +
+  facet_wrap(~ age, scales = "free_y", ncol = 1) +
+  theme(legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.position = "top",
+        legend.key.size = unit(0.5, "cm"))
+
+
+#CONTEGGIO IN PERCENTUALE 
+
+ggplot(df, aes(x = factor(conteggio_droghe), fill = factor(age))) +
+  geom_bar(stat = "count", position = "dodge", color = "black", alpha = 0.7) +
+  geom_text(stat = "count", aes(label = paste0(round(..prop.. * 100, 2), "%"), group = 1), 
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+  labs(title = "Percentuale di occorrenze per numero di droghe contemporaneamente diviso per età",
+       x = "Conteggio droghe",
+       y = "Percentuale") +
+  scale_fill_manual(values = palette_colori, 
+                    breaks = c("1", "2", "3", "4", "5", "6"),
+                    labels = c("12-17", "18-25", "26-34", "35-49", "50-64", "65+")) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), 
+                     expand = expansion(mult = c(0.2, 0.4)),
+                     limits = c(0, NA)) + 
+  theme_minimal() +
+  facet_wrap(~ age, scales = "free_y", ncol = 1) +
+  theme(legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.position = "top",
+        legend.key.size = unit(0.5, "cm"))
+
+
+
+# COMBINAZIONI CONTEGGIO  -------------------------------------------------
+
+ris7 <- df[df$conteggio_droghe == 7, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris6 <- df[df$conteggio_droghe == 6, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris5 <- df[df$conteggio_droghe == 5, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris4 <- df[df$conteggio_droghe == 4, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>%  arrange(desc(Conteggio))
+
+ris3 <- df[df$conteggio_droghe == 3, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris2 <- df[df$conteggio_droghe == 2, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+ris1 <- df[df$conteggio_droghe == 1, ] %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+
+#GRAFICO A TORTA
+ris3$Combinazioni <- apply(ris3[, 1:(ncol(ris3) - 2)], 1, function(x) paste(names(ris3)[x == 1], collapse = ", "))
+
+plot_ly(data = ris3, 
+        labels = ~Combinazioni,  # Usa la nuova colonna per etichettare le fette
+        values = ~Conteggio, 
+        type = 'pie', 
+        text = ~paste(Conteggio),
+        hoverinfo = "text+label+percent",
+        marker = list(colors = ~factor(Conteggio), 
+                      colorscale = "Inferno",
+                      line = list(color = 'white', width = 1))) %>%
+  layout(title = "Distribuzione delle combinazioni di droghe (Conteggio = 3)",
+         showlegend = TRUE,
+         legend = list(title = "Combinazione di Droghe",
+                       traceorder = "normal",
+                       itemclick = T))
+
+
+
+# MARIJUANA ---------------------------------------------------------------
+
+#MOSAIC PLOT
+mosaicplot(~marijuana + employment, data = df, main = "Mosaic Plot")
+mosaicplot(~marijuana + age, data = df, main = "Mosaic Plot")
+mosaicplot(~marijuana + cocaine, data = df, main = "Mosaic Plot")
+
+ris3333 <- df %>%
+  filter(conteggio_droghe >=1, marijuana == 1) %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+print(ris3333, n = Inf)
+
+
+
+
+# ALCOHOL -----------------------------------------------------------------
+
+#MOSAIC PLOT
+mosaicplot(~ alcohol  + cocaine, data = df, main = "Mosaic Plot")
+mosaicplot(~ alcohol  + age, data = df, main = "Mosaic Plot")
+mosaicplot(~ alcohol  + employment, data = df, main = "Mosaic Plot")
+mosaicplot(~ alcohol  + income, data = df, main = "Mosaic Plot")
+
+ris3333 <- df %>%
+  filter(conteggio_droghe >=1, alcohol == 1) %>%
+  group_by(cigarettes, cocaine, meth, crack, heroin, marijuana, pain_relievers, alcohol) %>%
+  summarise(Conteggio = n()) %>% arrange(desc(Conteggio))
+print(ris3333, n = Inf)
+
+
+
+# REGRESSIONE SINGOLE DROGHE, Y= CONTEGGIO DROGHE----------------------------------------------------------
+
+model_poisson <- glm(conteggio_droghe ~ 1+cocaine, data = df, family = poisson)#0.889
+model_poisson <- glm(conteggio_droghe ~ 1+marijuana, data = df, family = poisson)#0.549
+model_poisson <- glm(conteggio_droghe ~ 1+cigarettes, data = df, family = poisson)#1.155
+model_poisson <- glm(conteggio_droghe ~ 1+pain_relievers, data = df, family = poisson)#0.97
+model_poisson <- glm(conteggio_droghe ~ 1+alcohol, data = df, family = poisson)#1.97
+model_poisson <- glm(conteggio_droghe ~ 1+meth, data = df, family = poisson)
+summary(model_poisson)
+
+# REGRESSIONE SINGOLE DROGHE E RISK FACTORS, Y= CONTEGGIO DROGHE -------------------------------
+
+#MARIJUANA
+model_poisson <- glm(conteggio_droghe ~ 1+marijuana + income + father + age , data = df, family = poisson)
+model_poisson <- glm(conteggio_droghe ~ 1+marijuana, data = df, family = poisson)
+#COCAINE
+model_poisson <- glm(conteggio_droghe ~1+ cocaine + income, data = df, family = poisson)
+model_poisson <- glm(conteggio_droghe ~ 1+cocaine + income + father + age, data = df, family = poisson)
+
+#ALCOHOL
+model_poisson <- glm(conteggio_droghe ~ 1+alcohol + income, data = df, family = poisson)
+model_poisson <- glm(conteggio_droghe ~ 1+alcohol + income + father + age, data = df, family = poisson)
+
+#RISK FACTORS
+model_poisson <- glm(conteggio_droghe ~1+income + father +  mother + age+ education, data = df, family = poisson)
+model_poisson <- glm(conteggio_droghe ~1 +income + father +  mother + age+ education +  employment, data = df, family = poisson)
+summary(model_poisson)
+
+
+# REGRESSIONE COMPLETA ,Y= CONTEGGIO DROGHE----------------------------------------------------
+model_poisson <- glm(conteggio_droghe ~ 1+marijuana +cigarettes+ cocaine + alcohol + pain_relievers + father+ education + employment, data = df, family = poisson)
+summary(model_poisson)
+
+
+# REGRESSIONE Y= SINGOLA DROGA --------------------------------------------
+model_logistic <- glm(cocaine ~ 1 + father + mother + employment + age + income,family = binomial, data = df)
+summary(model_logistic)
+
+model_logistic <- glm(marijuana  ~ 1  + father + mother + employment + age + income,family = binomial, data = df)
+
+model_logistic <- glm(alcohol ~ 1  + father + mother + employment + age + income,family = binomial, data = df)
+summary(model_logistic)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
